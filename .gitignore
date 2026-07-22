@@ -1,0 +1,20 @@
+# local per-machine overrides (paths/secrets never committed)
+config/local.toml
+
+# runtime state (logs, cost records, export cursor) — machine-local, not versioned
+state/
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+*.egg
+
+# editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

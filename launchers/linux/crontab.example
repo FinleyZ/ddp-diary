@@ -1,0 +1,12 @@
+# ddp-diary VM crontab. Install with: launchers/linux/install-cron.sh (merges
+# these lines into your existing crontab without clobbering anything else), or
+# `crontab` this file directly if you have no other cron jobs.
+#
+# The 120s @reboot sleep is a coarse guard against the VMware shared folder not
+# being mounted yet right after boot. ddp_diary's own mount.py (spec.md §10)
+# probes independently before every ingest/export too — this line is defense
+# in depth, not the only guard.
+@reboot sleep 120
+
+# Nightly daily synthesis at 20:00 local time.
+0 20 * * * /home/YOUR_USER/ddp-diary/launchers/linux/run.sh daily >> /home/YOUR_USER/ddp-diary/state/cron.log 2>&1

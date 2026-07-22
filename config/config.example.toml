@@ -1,0 +1,66 @@
+# ddp-diary config template. `config/host.toml` and `config/vm.toml` (already
+# provided) are the real per-machine configs — copy THIS file only if you need
+# a third machine/role variant. See spec.md §7 for the full reference. A
+# gitignored `config/local.toml` next to a config file can override any key
+# per-machine without touching version control.
+
+# "host" or "vm" — selects which Role class drives this run (spec.md §5).
+role = "host"
+
+[paths]
+# The DATA repo — dated journal entries, NOT this tool repo. Two separate git
+# repos by design (spec.md §4, §17).
+data_dir = "/path/to/your/data-repo"
+# The VMware shared folder root. Host ingests from here; VM exports to here.
+shared_dir = "/path/to/shared/folder"
+# "auto" resolves to ~/.claude/projects (Path.home() covers both OSes).
+claude_projects = "auto"
+# "auto" resolves to <this tool repo>/state/ (gitignored: logs, cost, cursor).
+scratch_dir = "auto"
+
+[claude]
+# "auto" resolves via PATH (claude.cmd on Windows, claude on Linux).
+bin = "auto"
+model = "sonnet"
+output_format = "json"
+# Passed as --allowedTools. Bash(mv:*) is host-only (inbox archival) — note
+# Bash(date:*) is intentionally absent: the core injects the target date
+# directly, so Claude never needs to shell out to determine "today" (spec.md §8).
+allowed_tools = ["Read", "Glob", "Grep", "Write", "Edit"]
+add_dirs = []
+
+[limits]
+max_turns = 0          # 0 = unset (no --max-turns passed)
+max_budget_usd = 0     # 0 = no hard cap; cost is still logged every run
+timeout_sec = 900
+skim_max_files = 5     # bounds PROMPT SIZE, not scan cost — see session_extract.py
+skim_max_lines = 200
+
+[git]
+remote = "origin"
+branch = "master"
+push = true                   # false on the vm role — it never pushes
+push_even_on_failure = true   # spec.md §12's always-push rule
+commit_prefix = "journal:"
+
+[sync]
+export_prefix = "vm-daily-"
+cursor_file = ".export-state"
+ingest_glob = "*.md"
+mirror = false          # dropped per spec.md §17's decision — the share carries
+                        # only the entry export, nothing else
+
+[log]
+file = "auto"           # <scratch_dir>/ddp-diary.log; cost log is the .cost.jsonl sibling
+level = "info"          # or "debug" for verbose stdout echo of every log line
+
+# Future-only stubs — present, commented out, unused in v1 (spec.md §15).
+# [store]
+# backend = "sqlite"
+# path = "..."
+#
+# [publish]
+# obsidian_vault = "..."
+#
+# [mcp]
+# enabled = false

@@ -1,0 +1,52 @@
+# Host (Windows) config — see spec.md §7 and config.example.toml for the full
+# key reference with comments.
+
+role = "host"
+
+[paths]
+data_dir = 'C:\Users\Developer-1\Finley\pp\journal'
+shared_dir = 'C:\Users\Developer-1\Documents\Virtual Machines\jgr-update\shared\pp\log'
+claude_projects = "auto"
+scratch_dir = "auto"
+
+[claude]
+bin = "auto"
+model = "sonnet"
+output_format = "json"
+allowed_tools = ["Read", "Glob", "Grep", "Write", "Edit", "Bash(mv:*)"]
+add_dirs = []
+
+[limits]
+max_turns = 0
+max_budget_usd = 0
+timeout_sec = 900
+skim_max_files = 5
+skim_max_lines = 200
+
+[git]
+remote = "origin"
+branch = "master"
+push = true
+push_even_on_failure = true
+commit_prefix = "journal:"
+
+[sync]
+export_prefix = "vm-daily-"
+cursor_file = ".export-state"
+ingest_glob = "*.md"
+mirror = false
+
+[log]
+file = "auto"
+level = "info"
+
+# Future-only stubs — present, commented out, unused in v1 (spec.md §15).
+# [store]
+# backend = "sqlite"
+# path = "..."
+#
+# [publish]
+# obsidian_vault = "..."
+#
+# [mcp]
+# enabled = false

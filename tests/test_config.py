@@ -178,6 +178,74 @@ def test_local_toml_wins_over_role_config_by_design(tmp_path):
     assert cfg.data_dir == override_dir.resolve()
 
 
+def test_config_dir_unset_defaults_to_none_and_claude_projects_uses_home(tmp_path):
+    data_dir = tmp_path / "data"
+    shared_dir = tmp_path / "share"
+    data_dir.mkdir()
+    shared_dir.mkdir()
+    cfg_path = _write(
+        tmp_path / "host.toml",
+        f'role = "host"\n[paths]\ndata_dir = "{data_dir.as_posix()}"\nshared_dir = "{shared_dir.as_posix()}"\n',
+    )
+
+    cfg = config_module.load(cfg_path)
+
+    assert cfg.claude.config_dir is None
+    assert cfg.claude_projects == (Path.home() / ".claude" / "projects").resolve()
+
+
+def test_config_dir_set_pins_it_and_derives_claude_projects(tmp_path):
+    data_dir = tmp_path / "data"
+    shared_dir = tmp_path / "share"
+    pinned = tmp_path / ".claude-personal"
+    for d in (data_dir, shared_dir, pinned):
+        d.mkdir()
+    cfg_path = _write(
+        tmp_path / "host.toml",
+        f'''role = "host"
+[paths]
+data_dir = "{data_dir.as_posix()}"
+shared_dir = "{shared_dir.as_posix()}"
+
+[claude]
+config_dir = "{pinned.as_posix()}"
+''',
+    )
+
+    cfg = config_module.load(cfg_path)
+
+    assert cfg.claude.config_dir == pinned.resolve()
+    # "auto" claude_projects now derives from the pinned config dir, not ~/.claude
+    assert cfg.claude_projects == pinned.resolve() / "projects"
+
+
+def test_explicit_claude_projects_overrides_config_dir_derivation(tmp_path):
+    data_dir = tmp_path / "data"
+    shared_dir = tmp_path / "share"
+    pinned = tmp_path / ".claude-personal"
+    explicit_projects = tmp_path / "elsewhere" / "projects"
+    for d in (data_dir, shared_dir, pinned):
+        d.mkdir()
+    cfg_path = _write(
+        tmp_path / "host.toml",
+        f'''role = "host"
+[paths]
+data_dir = "{data_dir.as_posix()}"
+shared_dir = "{shared_dir.as_posix()}"
+claude_projects = "{explicit_projects.as_posix()}"
+
+[claude]
+config_dir = "{pinned.as_posix()}"
+''',
+    )
+
+    cfg = config_module.load(cfg_path)
+
+    # An explicit claude_projects wins over the config_dir-derived default.
+    assert cfg.claude_projects == explicit_projects.resolve()
+    assert cfg.claude.config_dir == pinned.resolve()
+
+
 def test_explicit_allowed_tools_and_limits_are_respected(tmp_path):
     data_dir = tmp_path / "data"
     shared_dir = tmp_path / "share"

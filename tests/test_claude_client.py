@@ -47,6 +47,53 @@ def test_build_argv_includes_one_add_dir_per_entry():
     assert argv.count("--add-dir") == 2
 
 
+def test_build_env_returns_none_when_no_config_dir():
+    assert claude_client._build_env(_claude_cfg()) is None
+
+
+def test_build_env_sets_claude_config_dir_when_pinned():
+    env = claude_client._build_env(_claude_cfg(config_dir=Path("/home/u/.claude-personal")))
+    assert env is not None
+    assert env["CLAUDE_CONFIG_DIR"] == str(Path("/home/u/.claude-personal"))
+    # inherits the rest of the parent environment (not a bare 1-key dict)
+    assert len(env) > 1
+
+
+def test_run_passes_claude_config_dir_env_to_subprocess(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["env"] = kwargs.get("env")
+        return subprocess.CompletedProcess(args, returncode=0, stdout='{"result": "ok"}\n', stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    claude_client.run(
+        "prompt",
+        claude_cfg=_claude_cfg(config_dir=Path("/home/u/.claude-personal")),
+        limits=_limits(),
+        cwd=tmp_path,
+    )
+
+    assert captured["env"] is not None
+    assert captured["env"]["CLAUDE_CONFIG_DIR"] == str(Path("/home/u/.claude-personal"))
+
+
+def test_run_leaves_env_inherited_when_no_config_dir(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured["env"] = kwargs.get("env")
+        return subprocess.CompletedProcess(args, returncode=0, stdout='{"result": "ok"}\n', stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    claude_client.run("prompt", claude_cfg=_claude_cfg(), limits=_limits(), cwd=tmp_path)
+
+    # env=None means "inherit the parent environment unchanged"
+    assert captured["env"] is None
+
+
 def test_extract_json_result_picks_last_matching_line():
     stdout = (
         "some log line\n"

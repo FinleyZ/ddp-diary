@@ -30,6 +30,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "claude": {
         "bin": "auto",
+        "config_dir": "",
         "model": "sonnet",
         "output_format": "json",
         "allowed_tools": ["Read", "Glob", "Grep", "Write", "Edit"],
@@ -112,16 +113,28 @@ def load(
     repo_root = tool_repo_root_dir or _paths.tool_repo_root(config_path)
     rel_to = config_path.parent
 
+    claude_raw = merged["claude"]
+
+    # Resolve claude.config_dir first: an empty string means "inherit the CLI's
+    # active default" (~/.claude); a path pins claude -p at that dir via
+    # CLAUDE_CONFIG_DIR AND is where "auto" session extraction looks (a pinned
+    # config dir keeps its transcripts under <config_dir>/projects, not ~/.claude).
+    config_dir_raw = claude_raw.get("config_dir", "")
+    claude_config_dir = (
+        _paths.expand(config_dir_raw, relative_to=rel_to) if config_dir_raw else None
+    )
+
     paths_raw = merged["paths"]
     data_dir = _paths.expand(paths_raw["data_dir"], relative_to=rel_to)
     shared_dir = _paths.expand(paths_raw["shared_dir"], relative_to=rel_to)
 
     claude_projects_raw = paths_raw["claude_projects"]
-    claude_projects = (
-        _paths.default_claude_projects()
-        if claude_projects_raw == "auto"
-        else _paths.expand(claude_projects_raw, relative_to=rel_to)
-    )
+    if claude_projects_raw != "auto":
+        claude_projects = _paths.expand(claude_projects_raw, relative_to=rel_to)
+    elif claude_config_dir is not None:
+        claude_projects = claude_config_dir / "projects"
+    else:
+        claude_projects = _paths.default_claude_projects()
 
     scratch_dir_raw = paths_raw["scratch_dir"]
     scratch_dir = (
@@ -131,7 +144,6 @@ def load(
     )
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
-    claude_raw = merged["claude"]
     claude_bin = _paths.resolve_claude_bin(claude_raw["bin"])
     add_dirs = [_paths.expand(p, relative_to=rel_to) for p in claude_raw.get("add_dirs", [])]
 
@@ -155,6 +167,7 @@ def load(
         scratch_dir=scratch_dir,
         claude=ClaudeConfig(
             bin=claude_bin,
+            config_dir=claude_config_dir,
             model=claude_raw["model"],
             output_format=claude_raw["output_format"],
             allowed_tools=list(claude_raw["allowed_tools"]),

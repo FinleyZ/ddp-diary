@@ -230,9 +230,10 @@ hardcoded is now a key below — there is no hardcoded absolute path anywhere in
 | `role` | str | `"host"` \| `"vm"` | `"host"` | `"vm"` |
 | `paths.data_dir` | path | the machine's data repo | `C:\Users\Developer-1\Finley\pp\journal` | `~/journal` |
 | `paths.shared_dir` | path | the VMware share root | `…\Virtual Machines\jgr-update\shared\pp\log` | `/mnt/hgfs/share-folder/shared/pp/log` |
-| `paths.claude_projects` | path\|"auto" | session transcripts root | `"auto"` (→ `~/.claude/projects`) | `"auto"` |
+| `paths.claude_projects` | path\|"auto" | session transcripts root | `"auto"` (→ `claude.config_dir`/projects if pinned, else `~/.claude/projects`) | `"auto"` |
 | `paths.scratch_dir` | path\|"auto" | state/log/cursor location | `"auto"` (→ `<tool_repo>/state`) | `"auto"` |
 | `claude.bin` | path\|"auto" | `claude` executable | `"auto"` (→ `shutil.which`, `claude.cmd`) | `"auto"` |
+| `claude.config_dir` | path\|"" | pin the account via `CLAUDE_CONFIG_DIR`; `""` = inherit default login | `.claude-personal` (pins the personal account) | `""` (set to the VM's personal dir at migration) |
 | `claude.model` | str | model id | `"sonnet"` | `"claude-sonnet-5"` *(open, §17)* |
 | `claude.output_format` | str | always `"json"` | `"json"` | `"json"` |
 | `claude.allowed_tools` | list[str] | `--allowedTools` | `Read,Glob,Grep,Write,Edit,Bash(mv:*)` | `Read,Glob,Grep,Write,Edit` |
@@ -468,7 +469,14 @@ failure (exit `6`), since sync's only job is the share operation.
 - **Secrets/auth:** git authentication uses the host's existing SSH credential (the
   `github-personal` alias/key already configured on this machine) — the tool reads,
   stores, and logs no tokens itself. `claude` authentication is whatever `claude` itself
-  already uses on each machine; ddp-diary does not manage it.
+  already uses on each machine; ddp-diary does not manage the credentials, but it *does*
+  choose **which** logged-in account is used: `claude.config_dir` (§7) sets
+  `CLAUDE_CONFIG_DIR` for the `claude -p` subprocess, pinning it to a specific config
+  directory (and its `/projects` transcripts) regardless of the default `~/.claude`
+  login. On the host this is pinned to the personal account (`.claude-personal`) so the
+  journal never accidentally summarizes or reads sessions under a work account if the
+  default login is switched. It never reads the token inside that dir — only points
+  `claude` at it.
 - **Durability:** the VM's local commit history is independent of the share; the host's
   GitHub push is the durable, externally-visible copy. The share is **transient
   transport only** — losing it loses nothing permanent, because nothing is copy-only
@@ -552,6 +560,20 @@ merely compiles.
 
 ### Decisions (ADR-lite — newest first)
 
+- **2026-07-23 — Pin the summarizing account via `claude.config_dir`.** The host has a
+  dual-account Claude setup (`~/.claude-personal` = personal iCloud account,
+  `~/.claude-work` = Santec work account, each a self-contained `CLAUDE_CONFIG_DIR`
+  target). Since ddp-diary just runs `claude -p`, it would otherwise inherit whichever
+  account the default `~/.claude` login happened to be at run time — so switching the
+  active login to work would silently make the *journal* summarize and read sessions
+  under the work account. Added a `claude.config_dir` config key: when set, the core
+  exports `CLAUDE_CONFIG_DIR` for the `claude` subprocess (`claude_client._build_env`)
+  *and* derives `paths.claude_projects` from `<config_dir>/projects`, so both the
+  summarizing account and the session source are pinned together. `host.toml` pins
+  `.claude-personal`. Verified with a real `claude -p` call under the pin (clean
+  `is_error:false` completion, ~$0.03). Empty `""` keeps the old inherit-the-default
+  behavior. Guarded by `test_config.py` (resolution + projects derivation) and
+  `test_claude_client.py` (the `CLAUDE_CONFIG_DIR` env is passed to the subprocess).
 - **2026-07-23 — Restored dropped "extend an existing same-date entry" prompt rule.**
   The first real production run surfaced a regression: `assets/prompts/tasks/daily.md`
   had no instruction for the case where an entry for the target date *already exists*

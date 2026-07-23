@@ -11,6 +11,10 @@ scratch_dir = "auto"
 
 [claude]
 bin = "auto"
+# Pin the summarizing account to a specific CLAUDE_CONFIG_DIR (empty = inherit
+# the active default login). Set this to the VM's personal config dir when the
+# VM side is migrated, mirroring host.toml — e.g. "/home/<user>/.claude-personal".
+config_dir = ""
 model = "claude-sonnet-5"
 output_format = "json"
 allowed_tools = ["Read", "Glob", "Grep", "Write", "Edit"]

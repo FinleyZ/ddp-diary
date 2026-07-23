@@ -22,6 +22,10 @@ class ClaudeConfig:
     output_format: str
     allowed_tools: list[str]
     add_dirs: list[Path]
+    # None = inherit the CLI's active default (~/.claude). A path pins the
+    # `claude -p` invocation to that config dir via CLAUDE_CONFIG_DIR, so the
+    # summarizing account is fixed regardless of what the default login is.
+    config_dir: Optional[Path] = None
 
 
 @dataclasses.dataclass(frozen=True)

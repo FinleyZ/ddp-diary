@@ -11,6 +11,11 @@ scratch_dir = "auto"
 
 [claude]
 bin = "auto"
+# Pin the summarizing account to the personal config dir (CLAUDE_CONFIG_DIR),
+# so the journal always uses the personal account and reads its sessions from
+# <config_dir>/projects — independent of whichever account the default
+# ~/.claude login happens to be. Empty "" = inherit the active default login.
+config_dir = 'C:\Users\Developer-1\.claude-personal'
 model = "sonnet"
 output_format = "json"
 allowed_tools = ["Read", "Glob", "Grep", "Write", "Edit", "Bash(mv:*)"]

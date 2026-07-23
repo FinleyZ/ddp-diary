@@ -21,6 +21,12 @@ scratch_dir = "auto"
 [claude]
 # "auto" resolves via PATH (claude.cmd on Windows, claude on Linux).
 bin = "auto"
+# Pin the claude CLI to a specific config directory (sets CLAUDE_CONFIG_DIR),
+# fixing WHICH account does the summarizing regardless of the default ~/.claude
+# login. When set, "auto" session extraction also reads from <config_dir>/projects.
+# Empty "" = inherit the active default login. Example: a dual-account setup
+# where '.claude-personal' holds the personal login and '.claude-work' the work one.
+config_dir = ""
 model = "sonnet"
 output_format = "json"
 # Passed as --allowedTools. Bash(mv:*) is host-only (inbox archival) — note

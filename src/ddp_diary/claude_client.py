@@ -8,6 +8,7 @@ cross-shell quoting entirely (spec.md §8's stdin decision).
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -27,6 +28,7 @@ def run(prompt_text: str, *, claude_cfg: ClaudeConfig, limits: LimitsConfig, cwd
     `--output-format json` and is not silently tolerated.
     """
     argv = _build_argv(claude_cfg, limits)
+    env = _build_env(claude_cfg)
 
     try:
         proc = subprocess.run(
@@ -36,6 +38,7 @@ def run(prompt_text: str, *, claude_cfg: ClaudeConfig, limits: LimitsConfig, cwd
             text=True,
             encoding="utf-8",
             cwd=str(cwd),
+            env=env,
             timeout=limits.timeout_sec if limits.timeout_sec > 0 else None,
         )
     except subprocess.TimeoutExpired as exc:
@@ -92,6 +95,18 @@ def _build_argv(claude_cfg: ClaudeConfig, limits: LimitsConfig) -> list[str]:
     if limits.max_budget_usd > 0:
         argv += ["--max-budget-usd", str(limits.max_budget_usd)]
     return argv
+
+
+def _build_env(claude_cfg: ClaudeConfig) -> Optional[dict]:
+    """Return the subprocess environment. When `config_dir` is set, pin the
+    `claude` CLI to that config directory via `CLAUDE_CONFIG_DIR`, so the
+    summarizing account is fixed regardless of the default login (spec.md §7,
+    §13). Returns None (inherit the parent env unchanged) when no pin is set."""
+    if not claude_cfg.config_dir:
+        return None
+    env = os.environ.copy()
+    env["CLAUDE_CONFIG_DIR"] = str(claude_cfg.config_dir)
+    return env
 
 
 def _extract_json_result(stdout: str) -> Optional[dict]:

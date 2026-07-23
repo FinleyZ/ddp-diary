@@ -552,6 +552,16 @@ merely compiles.
 
 ### Decisions (ADR-lite — newest first)
 
+- **2026-07-23 — Restored dropped "extend an existing same-date entry" prompt rule.**
+  The first real production run surfaced a regression: `assets/prompts/tasks/daily.md`
+  had no instruction for the case where an entry for the target date *already exists*
+  (e.g. a manual run earlier the same day, then the scheduled 21:00 run). The original
+  VM script's prompt had *"if today's file already exists from an earlier run, extend
+  it — don't duplicate or overwrite"*; the rewrite lost it, so a second same-day run
+  risked clobbering the first entry. Restored it: step 1 now reads the most recent
+  *prior* day for continuity and separately notes an existing same-date entry; step 3
+  says to extend/refine an existing same-date entry rather than overwrite. Guarded by
+  `tests/test_prompts.py::test_daily_prompt_instructs_extend_not_overwrite_when_entry_exists`.
 - **2026-07-21 — Post-build adversarial review, two independent passes.** Two review
   agents (correctness/cross-platform; spec-fidelity/completeness) read the finished
   v1 codebase against this spec and found real, concrete bugs — not just wording

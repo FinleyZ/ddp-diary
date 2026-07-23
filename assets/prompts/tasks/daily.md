@@ -6,10 +6,14 @@ date). Follow the conventions above exactly.
 
 ## 1. Review recent history
 
-Read the most recent existing file in `daily/` (skip `inbox/`). Do not repeat work
-already journaled there. If today continues that work, frame it as a continuation
-("continued the UART driver from yesterday: interrupt handler works, DMA still
-pending") rather than re-describing it.
+Read the most recent *prior* day's entry in `daily/` — the newest file dated before
+the target date (skip `inbox/`). Do not repeat work already journaled there; if today
+continues that work, frame it as a continuation ("continued the UART driver from
+yesterday: interrupt handler works, DMA still pending") rather than re-describing it.
+
+Also check whether an entry for the **target date itself** already exists (from an
+earlier run the same day). If it does, read it — in step 3 you will extend and refine
+it, not overwrite it.
 
 ## 2. Gather input
 
@@ -25,8 +29,11 @@ before writing.
 ## 3. Write
 
 Write `daily/<target-date>.md` with exactly these sections, skipping any that are
-empty. If there is genuinely no data for today, write a one-line entry saying so —
-never invent activity.
+empty. **If an entry for the target date already exists** (an earlier run the same
+day, per step 1), extend and refine it — merge in any new activity, don't duplicate
+lines already there and don't blindly overwrite what's already been captured. If there
+is genuinely no data for today, write a one-line entry saying so — never invent
+activity.
 
 - **## Did** — tasks and their state (advanced / blocked / shipped / verified), one
   line each.

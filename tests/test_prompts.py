@@ -48,6 +48,19 @@ def test_assemble_daily_includes_digest_and_role_fragment():
     assert "Journal conventions" in text  # from assets/conventions/conventions.md
 
 
+def test_daily_prompt_instructs_extend_not_overwrite_when_entry_exists():
+    """Guard against a regression: the daily task must tell Claude to EXTEND an
+    already-existing same-date entry rather than overwrite it, so a second run
+    the same day (e.g. a manual run before the scheduled one) doesn't clobber
+    the first. This behavior was in the original VM script and was once dropped
+    in the rewrite — see spec.md §17's 2026-07-23 entry."""
+    text = prompts.assemble("daily", "host", datetime.date(2026, 7, 20), digest_text="x")
+
+    lowered = text.lower()
+    assert "already exists" in lowered
+    assert "extend" in lowered
+
+
 def test_assemble_weekly_excludes_role_fragment_and_digest():
     text = prompts.assemble("weekly", "host", datetime.date(2026, 7, 20))
 

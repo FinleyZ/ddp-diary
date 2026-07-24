@@ -11,6 +11,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG_PATH="$REPO_ROOT/config/vm.toml"
 
+# cron's PATH is minimal and won't include a `--user` pip/npm install's bin dir
+# (the old run.sh exported this same PATH for the same reason) — without it,
+# claude.bin = "auto" can't find `claude` via shutil.which.
+export PATH="$HOME/.local/bin:/usr/local/bin:${PATH:-/usr/bin:/bin}"
+
 # Make the core importable even without an editable `pip install -e .`.
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 

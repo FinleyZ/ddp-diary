@@ -605,6 +605,26 @@ merely compiles.
 
 ### Decisions (ADR-lite — newest first)
 
+- **2026-07-24 — VM migration completed; two real bugs found by its live
+  testing, fixed upstream.** An independent Claude Code agent on the VM
+  followed `docs/vm-migration.md` (§0–§8), validating against a scratch copy
+  of `~/journal` before touching anything live, exactly as the doc requires.
+  Migration succeeded with zero data issues. Two bugs surfaced only because
+  the validation was run for real under cron-like conditions, not caught by
+  the test suite (both are launcher/environment concerns the test suite
+  can't see): (1) `launchers/linux/run.sh` and `install-cron.sh` were
+  committed without their git executable bit — likely lost since they were
+  authored from the Windows host — so cron would have failed with
+  "Permission denied" on tonight's first unattended run; fixed via `git
+  update-index --chmod=+x`. (2) `claude.bin = "auto"` resolves via
+  `shutil.which`, which fails under cron's minimal PATH when `claude` is a
+  `--user` pip/npm install living in `~/.local/bin` — the retired old
+  `run.sh` had exported this same PATH for the same reason, and the
+  rewrite silently dropped it. Fixed by restoring that PATH export in
+  `launchers/linux/run.sh` rather than pinning a machine-specific absolute
+  path in `vm.toml` (the VM agent's own local workaround), so the fix is
+  generic and doesn't reintroduce a personal path into a config file.
+  Regression guards added in `tests/test_launchers.py`.
 - **2026-07-24 — Three usability improvements after the first real production
   run: auto-backfill (off by default), `status`, relative `--date` aliases.**
   All additive; `run_job`'s signature and idempotency logic untouched; the

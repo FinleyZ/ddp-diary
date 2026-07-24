@@ -228,8 +228,8 @@ hardcoded is now a key below — there is no hardcoded absolute path anywhere in
 | Key | Type | Meaning | Host | VM |
 |---|---|---|---|---|
 | `role` | str | `"host"` \| `"vm"` | `"host"` | `"vm"` |
-| `paths.data_dir` | path | the machine's data repo | `C:\Users\Developer-1\Finley\pp\journal` | `~/journal` |
-| `paths.shared_dir` | path | the VMware share root | `…\Virtual Machines\jgr-update\shared\pp\log` | `/mnt/hgfs/share-folder/shared/pp/log` |
+| `paths.data_dir` | path | the machine's data repo | `C:\Users\<you>\pp\journal` | `~/journal` |
+| `paths.shared_dir` | path | the VMware share root | `…\Virtual Machines\<vm-name>\shared\pp\log` | `/mnt/hgfs/share-folder/shared/pp/log` |
 | `paths.claude_projects` | path\|"auto" | session transcripts root | `"auto"` (→ `claude.config_dir`/projects if pinned, else `~/.claude/projects`) | `"auto"` |
 | `paths.scratch_dir` | path\|"auto" | state/log/cursor location | `"auto"` (→ `<tool_repo>/state`) | `"auto"` |
 | `claude.bin` | path\|"auto" | `claude` executable | `"auto"` (→ `shutil.which`, `claude.cmd`) | `"auto"` |
@@ -647,8 +647,8 @@ merely compiles.
   entry already present from an earlier manual test, pushed under the
   personal account.
 - **2026-07-23 — Pin the summarizing account via `claude.config_dir`.** The host has a
-  dual-account Claude setup (`~/.claude-personal` = personal iCloud account,
-  `~/.claude-work` = Santec work account, each a self-contained `CLAUDE_CONFIG_DIR`
+  dual-account Claude setup (`~/.claude-personal` = personal account,
+  `~/.claude-work` = work account, each a self-contained `CLAUDE_CONFIG_DIR`
   target). Since ddp-diary just runs `claude -p`, it would otherwise inherit whichever
   account the default `~/.claude` login happened to be at run time — so switching the
   active login to work would silently make the *journal* summarize and read sessions

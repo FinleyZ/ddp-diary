@@ -1,11 +1,15 @@
 # Host (Windows) config — see spec.md §7 and config.example.toml for the full
 # key reference with comments.
+#
+# The real data_dir/shared_dir/config_dir paths for this machine live in a
+# gitignored config/local.toml sibling (never committed) — it overrides the
+# placeholders below (spec.md §7 precedence: local.toml > this file).
 
 role = "host"
 
 [paths]
-data_dir = 'C:\Users\Developer-1\Finley\pp\journal'
-shared_dir = 'C:\Users\Developer-1\Documents\Virtual Machines\jgr-update\shared\pp\log'
+data_dir = 'C:\Users\<you>\path\to\journal'
+shared_dir = 'C:\Users\<you>\path\to\shared'
 claude_projects = "auto"
 scratch_dir = "auto"
 
@@ -15,7 +19,8 @@ bin = "auto"
 # so the journal always uses the personal account and reads its sessions from
 # <config_dir>/projects — independent of whichever account the default
 # ~/.claude login happens to be. Empty "" = inherit the active default login.
-config_dir = 'C:\Users\Developer-1\.claude-personal'
+# Real value lives in config/local.toml (see note above).
+config_dir = ""
 model = "sonnet"
 output_format = "json"
 allowed_tools = ["Read", "Glob", "Grep", "Write", "Edit", "Bash(mv:*)"]

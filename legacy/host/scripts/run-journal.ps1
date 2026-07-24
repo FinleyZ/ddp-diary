@@ -20,7 +20,7 @@ if ($Job -eq 'daily') {
 
     # ingest VM journal exports from the VMware shared folder (only .md files;
     # the VM's own cron.log and everything else in the share stay untouched)
-    $vmLog = 'C:\Users\Developer-1\Documents\Virtual Machines\jgr-update\shared\pp\log'
+    $vmLog = 'C:\Users\<you>\Documents\Virtual Machines\<vm-name>\shared\pp\log'
     if (Test-Path $vmLog) {
         Get-ChildItem $vmLog -Filter *.md -File -ErrorAction SilentlyContinue | ForEach-Object {
             Move-Item $_.FullName (Join-Path $repo "inbox\$($_.Name)") -Force

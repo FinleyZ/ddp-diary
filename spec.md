@@ -1,6 +1,6 @@
 # ddp-diary — spec
 
-**Spec version:** 0.1.0 (draft) · **Last updated:** 2026-07-21 · **Tracks tool version:** v1.0.0
+**Spec version:** 0.2.0 (draft) · **Last updated:** 2026-07-24 · **Tracks tool version:** v1.0.0
 
 This document is the single source of truth for what ddp-diary is and how it behaves.
 Code and spec disagreeing is a **spec bug** — fix one, then log the fix in §17. Every
@@ -243,6 +243,8 @@ hardcoded is now a key below — there is no hardcoded absolute path anywhere in
 | `limits.timeout_sec` | int | subprocess timeout | `900` | `900` |
 | `limits.skim_max_files` | int | extractor file cap | `5` | `5` |
 | `limits.skim_max_lines` | int | extractor per-file line cap | `200` | `200` |
+| `limits.backfill_days` | int | auto-backfill look-back window, days; `0`=off | `0` (opt-in) | `0` (opt-in) |
+| `limits.backfill_max_per_run` | int | cap on missing dates processed in one run | `3` | `3` |
 | `git.remote` | str | data-repo remote name | `"origin"` | *(unused — VM never pushes)* |
 | `git.branch` | str | data-repo branch | `"master"` | `"master"` (local only) |
 | `git.push` | bool | push after commit | `true` | `false` |
@@ -318,25 +320,46 @@ which files it actually folded) rather than mechanical git plumbing (§8, §12 d
 
 ```
 ddp-diary run      --job {daily|weekly|monthly} --config PATH [--role host|vm]
-                    [--date YYYY-MM-DD] [--dry-run] [--no-push] [-v|--verbose]
-ddp-diary backfill  --config PATH [--role host|vm] --from YYYY-MM-DD --to YYYY-MM-DD
-                    [--dry-run]
+                    [--date DATE] [--dry-run] [--no-push] [-v|--verbose]
+ddp-diary backfill  --config PATH [--role host|vm] --from DATE --to DATE [--dry-run]
 ddp-diary sync      --config PATH [--role host|vm] {--export-only|--ingest-only}
 ddp-diary doctor    --config PATH [--role host|vm] [-v|--verbose]
+ddp-diary status    --config PATH [--role host|vm] [-v|--verbose]
 ddp-diary version
 ```
 
 `--role` is accepted by every subcommand that loads a config (same override semantics
-as `run`'s). `doctor -v` prints the fully resolved config before running its checks —
-useful for seeing exactly what a given config file resolved to when a check fails.
+as `run`'s). `doctor -v`/`status -v` both print the fully resolved config before running
+(shared via `doctor.print_resolved_config`, not duplicated) — useful for seeing exactly
+what a given config file resolved to. `DATE` accepts `YYYY-MM-DD`, or the case-insensitive
+aliases `today`/`yesterday` — accepted everywhere a date is taken (`run --date`,
+`backfill --from`/`--to`).
 
-- **`run`** — the main pipeline (§4 spine). `--date` overrides "today" (for backfill/
-  testing); `--role` overrides `config.role` for one invocation.
+- **`run`** — the main pipeline (§4 spine). `--role` overrides `config.role` for one
+  invocation. For `--job daily` specifically, **omitting `--date` entirely** (the exact
+  form the real scheduled launcher uses) routes through `runner.run_daily_with_backfill`
+  — best-effort auto-backfill (§11) first, then today — while **any explicit `--date`**
+  (including `--date today`) bypasses backfill and calls `run_job` directly. Non-`daily`
+  jobs always call `run_job` directly; there is no weekly/monthly backfill concept.
 - **`backfill --from --to`** — reprocesses a date range; dedup-safe (re-running is a
-  no-op for dates that already have a correct entry).
+  no-op for dates that already have a correct entry). Independent of, and unaffected by,
+  the `limits.backfill_days` auto-backfill mechanism above — this is the explicit,
+  operator-driven range tool; that is the automatic, activity-driven catch-up.
 - **`sync`** — runs only the ingest/export stage for the configured role, useful for
   retrying a failed share operation without a full synthesis run.
 - **`doctor`** — environment/health check (§14); exit code reflects the worst check.
+- **`status`** — a one-glance, read-only report: latest `daily/` entry and its age, git
+  state (dirty/ahead/behind/last commit, via `gitops.read_status`), and the last run's
+  outcome. Exists because answering "did it work" previously meant manually chaining
+  `git log`, tailing the run log, and `doctor` across two directories. Always exits `0`
+  except `1` if `data_dir` itself is unreachable (a reporting command finding something
+  to *report* isn't itself a failure in the §9 sense). The "last run" line is **not**
+  read from the cost-log JSONL alone — `record_cost()` only writes on a *successful*
+  `claude` call, so after a failed run the JSONL would silently show stale success data
+  from a prior night. Instead it scans the plain-text log for the most recent
+  `started`/`ended` banner pair and checks whether a `FAILED` line falls between them,
+  then pairs that success/fail signal with the cost-log's last line for `$`/turns/
+  duration detail on an actual success.
 - **`--dry-run`** — resolves config, extracts sessions, builds the prompt, and prints
   the planned actions (which files would be written/moved, the commit message, whether
   a push would occur) **without** invoking `claude`, writing entries, or touching git or
@@ -414,10 +437,32 @@ failure (exit `6`), since sync's only job is the share operation.
 - **Copy-only semantics** — `sync.export` never deletes or moves the VM's local
   entries; it only copies. Re-running is idempotent: nothing new to export copies
   nothing, and the share is never a required backup (§13).
-- **Backfill rule** — a `vm-daily-YYYY-MM-DD` ingested with a date before "today" folds
-  into **that date's** host entry (creating it if missing, marked backfilled), never
-  into today's. This is host synthesis logic (`roles/host.md`), not sync mechanics —
-  `sync.ingest` only relocates files; it never decides where content belongs.
+- **Inbox-driven backfill rule** — a `vm-daily-YYYY-MM-DD` ingested with a date before
+  "today" folds into **that date's** host entry (creating it if missing, marked
+  backfilled), never into today's. This is host synthesis logic (`roles/host.md`), not
+  sync mechanics — `sync.ingest` only relocates files; it never decides where content
+  belongs. This is a **separate mechanism** from the auto-backfill below — this one is
+  triggered by a *late file arriving from the VM*; the other by *this machine's own
+  session activity having no entry yet*. Both can legitimately touch the same date's
+  file on different nights; that's the same "extend, don't duplicate" synthesis
+  responsibility either way, not a conflict between the two mechanisms.
+- **Auto-backfill (activity-driven, `limits.backfill_days`)** — `runner.
+  backfill_missing_days()` restores the original VM script's behavior (it auto-filled
+  the past 7 days), dropped in the initial rewrite and re-added after the first real
+  production run exposed the gap (spec.md §17, 2026-07-24). Ships **off** (`0`) on both
+  roles — opt in deliberately once it's been watched run manually at least once, since
+  host has no cost ceiling (`limits.max_budget_usd = 0`) and a wide window plus sparse
+  history could otherwise queue an unbounded number of `claude` calls unattended.
+  Bounded two ways: `backfill_days` limits how far back to *look* (via
+  `session_extract.dates_with_activity()`, checked against which dates already have a
+  `daily/{date}.md`); `backfill_max_per_run` independently caps how many missing dates
+  get *processed* in one invocation, oldest first. Only fires when `run --job daily` is
+  invoked with **no explicit `--date`** — the exact form the real scheduled launcher
+  uses — via `runner.run_daily_with_backfill()`; an explicit `--date` (including
+  `--date today`) always bypasses it. Each missing date is independent and best-effort
+  (a failure on one is logged and does not stop the rest, and never affects today's own
+  exit code) — the whole point is that one missed day shouldn't compound into losing
+  every day after it too.
 - **Dedup / entry identity** — an entry's identity is `(role's data repo, period, date)`.
   Before writing, synthesis reads the most recent existing entry for that identity and
   extends/replaces rather than duplicating. Re-running `run` or `backfill` for a date
@@ -560,6 +605,47 @@ merely compiles.
 
 ### Decisions (ADR-lite — newest first)
 
+- **2026-07-24 — Three usability improvements after the first real production
+  run: auto-backfill (off by default), `status`, relative `--date` aliases.**
+  All additive; `run_job`'s signature and idempotency logic untouched; the
+  138-test suite (104 → 138) passed with zero regressions. Design was
+  independently pressure-tested against the real deployed config/logs/journal
+  (not just the source) before implementation — one correction came out of
+  that: `limits.backfill_days` ships `0` (off) on both roles, not `7` as
+  first drafted, specifically because host has no cost ceiling
+  (`max_budget_usd = 0`) and the night it would matter most (several days
+  away) is exactly the night no one is watching it fire for the first time.
+  (1) `session_extract.dates_with_activity()` — dead code since the initial
+  build, restoring the original VM script's auto-fill-the-past-week
+  behavior — is now called by `runner.backfill_missing_days()`, wired through
+  a new `runner.run_daily_with_backfill()` that `cli.py` routes to precisely
+  when `--job daily` has no explicit `--date` (the real scheduled launcher's
+  exact invocation); an explicit `--date` (even `today`) bypasses it and
+  calls the unchanged `run_job` directly. Bounded by both `backfill_days`
+  (how far back to look) and the new, independent `backfill_max_per_run`
+  (how many missing dates get processed in one run — decoupled so a sparse
+  history with a wide window can't queue unbounded `claude` calls). (2)
+  `ddp-diary status` — new read-only command answering "did it work" in one
+  command instead of manually chaining `git log`/log-tail/`doctor`; new
+  `gitops.read_status()` (never raises; `ahead`/`behind` are `None` with no
+  tracked upstream) and a promoted `doctor.print_resolved_config` (was
+  private, safe rename, shared by both `-v` flags). Deliberately does **not**
+  trust the cost-log JSONL alone for success/failure — `record_cost()` only
+  writes on a successful `claude` call, so after a failure the JSONL would
+  silently show stale success data from a prior night; instead scans the
+  plain-text log's `started`/`ended` banner pair for an intervening `FAILED`
+  line, then pairs that signal with the JSONL's last line for cost detail on
+  an actual success. Guarded by a regression test proving this exact
+  stale-JSONL trap can't happen. (3) `--date` accepts case-insensitive
+  `today`/`yesterday` (both `run --date` and `backfill --from/--to`); a bad
+  format now raises `ConfigError` → exit `2`, correcting a prior bare
+  `ValueError` → exit `1` (confirmed no test locked in the old code). This
+  same night's real production run (the first genuinely unattended one)
+  incidentally became the first real-world proof of both this session's
+  earlier "extend, don't overwrite" prompt fix and the `claude.config_dir`
+  account pin — `status` showed the run OK, extending (not duplicating) an
+  entry already present from an earlier manual test, pushed under the
+  personal account.
 - **2026-07-23 — Pin the summarizing account via `claude.config_dir`.** The host has a
   dual-account Claude setup (`~/.claude-personal` = personal iCloud account,
   `~/.claude-work` = Santec work account, each a self-contained `CLAUDE_CONFIG_DIR`

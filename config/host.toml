@@ -27,6 +27,11 @@ max_budget_usd = 0
 timeout_sec = 900
 skim_max_files = 5
 skim_max_lines = 200
+# Auto-backfill missed days before today's run (spec.md §11). Ships OFF: host
+# has no cost ceiling (max_budget_usd above), so this stays a deliberate
+# opt-in — flip backfill_days > 0 once you've watched it run manually.
+backfill_days = 0
+backfill_max_per_run = 3
 
 [git]
 remote = "origin"

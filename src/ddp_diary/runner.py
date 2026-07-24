@@ -143,3 +143,98 @@ def _commit_and_push(ctx: RunContext, role: roles.Role, *, best_effort: bool = F
             logging_setup.failure(config, f"push ({err})", echo=ctx.echo)
             if not best_effort:
                 raise GitPushError(err or "push failed")
+
+
+def backfill_missing_days(
+    config: Config,
+    *,
+    before_date: datetime.date,
+    dry_run: bool = False,
+) -> list[datetime.date]:
+    """Best-effort catch-up for missed daily entries (spec.md §11, `future`
+    no longer — restores the original VM script's auto-backfill behavior,
+    off by default via `limits.backfill_days`).
+
+    For each date in `[before_date - backfill_days, before_date)` that has
+    session activity but no `daily/{date}.md` yet, runs the exact same daily
+    job for that date instead of today's. Oldest first, capped at
+    `limits.backfill_max_per_run` so a sparse history plus a wide
+    `backfill_days` window can't queue an unbounded number of `claude` calls
+    in one invocation. Each date is independent and best-effort: a failure on
+    one date is logged and does not stop the rest — this exists specifically
+    so one missed day doesn't compound into losing every day after it too.
+
+    Note: each iteration re-runs `role.before_run` (e.g. `HostRole`'s share
+    ingest) and, if configured, a real push — harmless (nothing new to move
+    after the first date, and a failed early push just means the next date's
+    push carries the earlier commit along too) but worth knowing if a night
+    with backfill activity shows several ingest/push log lines for what looks
+    like one run.
+    """
+    backfill_days = config.limits.backfill_days
+    if backfill_days <= 0:
+        return []
+
+    activity_dates = session_extract.dates_with_activity(config.claude_projects)
+    window_start = before_date - datetime.timedelta(days=backfill_days)
+
+    candidates: list[datetime.date] = []
+    for date_str in activity_dates:
+        d = _parse_iso_date(date_str)
+        if d is None or not (window_start <= d < before_date):
+            continue
+        if _entry_exists(config, d):
+            continue
+        candidates.append(d)
+    candidates.sort()
+
+    cap = config.limits.backfill_max_per_run
+    if cap > 0:
+        candidates = candidates[:cap]
+
+    filled: list[datetime.date] = []
+    for d in candidates:
+        try:
+            run_job(config, "daily", target_date=d, dry_run=dry_run)
+            filled.append(d)
+        except Exception as exc:
+            logging_setup.failure(config, f"backfill {d.isoformat()}: {exc}")
+    return filled
+
+
+def run_daily_with_backfill(
+    config: Config,
+    *,
+    dry_run: bool = False,
+    no_push: bool = False,
+    verbose: bool = False,
+) -> RunContext:
+    """The entry point the real scheduled launcher hits for `daily` when no
+    explicit `--date` is given (the normal unattended case): best-effort
+    backfill first (skipped entirely, including the history scan, when
+    `limits.backfill_days == 0` — the default), then today's actual run.
+
+    Always returns TODAY's `RunContext` — a backfill failure is logged but
+    never affects today's own exit code (spec.md §9); `cli.py` maps exit
+    codes from this return value exactly as it would from a plain `run_job`
+    call for `daily`.
+    """
+    today = datetime.date.today()
+    if config.limits.backfill_days > 0:
+        try:
+            backfill_missing_days(config, before_date=today, dry_run=dry_run)
+        except Exception as exc:
+            logging_setup.failure(config, f"backfill: {exc}")
+
+    return run_job(config, "daily", target_date=today, dry_run=dry_run, no_push=no_push, verbose=verbose)
+
+
+def _parse_iso_date(date_str: str) -> Optional[datetime.date]:
+    try:
+        return datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _entry_exists(config: Config, d: datetime.date) -> bool:
+    return (config.data_dir / "daily" / f"{d.isoformat()}.md").exists()

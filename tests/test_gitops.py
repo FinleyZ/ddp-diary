@@ -58,3 +58,63 @@ def test_push_fails_gracefully_with_no_remote(data_repo):
     ok, err = gitops.push(data_repo, _git_cfg(push=True))
     assert ok is False
     assert err  # some error message, but never raises
+
+
+# --- read_status (spec.md §9, for `ddp-diary status`) ----------------------
+
+
+def test_read_status_reports_dirty_when_uncommitted_changes_present(data_repo):
+    (data_repo / "daily" / "2026-07-22.md").write_text("# uncommitted", encoding="utf-8")
+
+    st = gitops.read_status(data_repo)
+
+    assert st.is_dirty is True
+
+
+def test_read_status_reports_clean_when_nothing_uncommitted(data_repo):
+    st = gitops.read_status(data_repo)
+
+    assert st.is_dirty is False
+
+
+def test_read_status_ahead_behind_none_when_no_upstream(data_repo):
+    st = gitops.read_status(data_repo)
+
+    assert st.ahead is None
+    assert st.behind is None
+
+
+def test_read_status_reports_ahead_count_with_a_tracked_upstream(tmp_path, data_repo):
+    bare = tmp_path / "bare-remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "remote", "add", "origin", str(bare)], cwd=str(data_repo), check=True)
+    subprocess.run(["git", "push", "-q", "-u", "origin", "master"], cwd=str(data_repo), check=True, capture_output=True)
+
+    (data_repo / "daily" / "2026-07-22.md").write_text("# entry", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=str(data_repo), check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "unpushed commit"], cwd=str(data_repo), check=True)
+
+    st = gitops.read_status(data_repo)
+
+    assert st.ahead == 1
+    assert st.behind == 0
+
+
+def test_read_status_reports_last_commit_subject_and_date(data_repo):
+    st = gitops.read_status(data_repo)
+
+    assert st.last_commit_subject == "init"
+    assert st.last_commit_date is not None
+
+
+def test_read_status_never_raises_on_non_repo_dir(tmp_path):
+    not_a_repo = tmp_path / "not-a-repo"
+    not_a_repo.mkdir()
+
+    st = gitops.read_status(not_a_repo)  # must not raise
+
+    assert st.is_dirty is None
+    assert st.ahead is None
+    assert st.behind is None
+    assert st.last_commit_subject is None
+    assert st.last_commit_date is None

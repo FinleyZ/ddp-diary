@@ -42,6 +42,8 @@ DEFAULTS: dict[str, Any] = {
         "timeout_sec": 900,
         "skim_max_files": 5,
         "skim_max_lines": 200,
+        "backfill_days": 0,
+        "backfill_max_per_run": 3,
     },
     "git": {
         "remote": "origin",
@@ -179,6 +181,8 @@ def load(
             timeout_sec=int(limits_raw["timeout_sec"]),
             skim_max_files=int(limits_raw["skim_max_files"]),
             skim_max_lines=int(limits_raw["skim_max_lines"]),
+            backfill_days=int(limits_raw["backfill_days"]),
+            backfill_max_per_run=int(limits_raw["backfill_max_per_run"]),
         ),
         git=GitConfig(
             remote=git_raw["remote"],

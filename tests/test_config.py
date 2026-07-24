@@ -272,3 +272,19 @@ max_budget_usd = 1.00
     assert cfg.claude.allowed_tools == ["Read", "Write", "Glob"]
     assert cfg.limits.max_turns == 15
     assert cfg.limits.max_budget_usd == 1.00
+
+
+def test_backfill_days_and_max_per_run_default_to_zero_and_three(tmp_path):
+    data_dir = tmp_path / "data"
+    shared_dir = tmp_path / "share"
+    data_dir.mkdir()
+    shared_dir.mkdir()
+    cfg_path = _write(
+        tmp_path / "host.toml",
+        f'role = "host"\n[paths]\ndata_dir = "{data_dir.as_posix()}"\nshared_dir = "{shared_dir.as_posix()}"\n',
+    )
+
+    cfg = config_module.load(cfg_path)
+
+    assert cfg.limits.backfill_days == 0
+    assert cfg.limits.backfill_max_per_run == 3

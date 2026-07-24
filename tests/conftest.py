@@ -72,6 +72,8 @@ def make_config():
         push_even_on_failure: bool = True,
         max_budget_usd: float = 0,
         max_turns: int = 0,
+        backfill_days: int = 0,
+        backfill_max_per_run: int = 3,
     ) -> Config:
         return Config(
             role=role,
@@ -92,6 +94,8 @@ def make_config():
                 timeout_sec=900,
                 skim_max_files=5,
                 skim_max_lines=200,
+                backfill_days=backfill_days,
+                backfill_max_per_run=backfill_max_per_run,
             ),
             git=GitConfig(
                 remote="origin",

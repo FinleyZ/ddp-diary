@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from .errors import GitCommitError
-from .models import GitConfig
+from .models import GitConfig, GitStatus
 
 
 def commit(data_dir: Path, git_cfg: GitConfig, *, scope: str, date_str: str) -> bool:
@@ -53,6 +53,86 @@ def push(data_dir: Path, git_cfg: GitConfig) -> tuple[bool, Optional[str]]:
     if proc.returncode != 0:
         return False, (proc.stderr.strip() or proc.stdout.strip())
     return True, None
+
+
+def read_status(data_dir: Path) -> GitStatus:
+    """Read-only git status for `status` (spec.md §9). Never raises — a
+    non-repo `data_dir`, or a repo with no upstream tracked, both degrade to
+    best-effort `None` fields rather than an exception, since this feeds a
+    human-facing report, not a decision path (mirrors `mount.is_available`'s
+    "never raise" philosophy)."""
+    if not _is_git_repo(data_dir):
+        return GitStatus()
+
+    ahead, behind = _read_ahead_behind(data_dir)
+    subject, commit_date = _read_last_commit(data_dir)
+    return GitStatus(
+        is_dirty=_read_is_dirty(data_dir),
+        ahead=ahead,
+        behind=behind,
+        last_commit_subject=subject,
+        last_commit_date=commit_date,
+    )
+
+
+def _is_git_repo(data_dir: Path) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(data_dir), capture_output=True, text=True, encoding="utf-8",
+        )
+        return proc.returncode == 0 and proc.stdout.strip() == "true"
+    except OSError:
+        return False
+
+
+def _read_is_dirty(data_dir: Path) -> Optional[bool]:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(data_dir), capture_output=True, text=True, encoding="utf-8",
+        )
+    except OSError:
+        return None
+    return bool(proc.stdout.strip()) if proc.returncode == 0 else None
+
+
+def _read_ahead_behind(data_dir: Path) -> tuple[Optional[int], Optional[int]]:
+    # Fails cleanly (nonzero exit) when no upstream is configured for HEAD —
+    # that's a normal, expected case here, not an error to surface.
+    try:
+        proc = subprocess.run(
+            ["git", "rev-list", "--left-right", "--count", "HEAD...@{u}"],
+            cwd=str(data_dir), capture_output=True, text=True, encoding="utf-8",
+        )
+    except OSError:
+        return None, None
+    if proc.returncode != 0:
+        return None, None
+    parts = proc.stdout.strip().split()
+    if len(parts) != 2:
+        return None, None
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None, None
+
+
+def _read_last_commit(data_dir: Path) -> tuple[Optional[str], Optional[str]]:
+    try:
+        subject_proc = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            cwd=str(data_dir), capture_output=True, text=True, encoding="utf-8",
+        )
+        date_proc = subprocess.run(
+            ["git", "log", "-1", "--format=%ci"],
+            cwd=str(data_dir), capture_output=True, text=True, encoding="utf-8",
+        )
+    except OSError:
+        return None, None
+    subject = subject_proc.stdout.strip() if subject_proc.returncode == 0 else None
+    commit_date = date_proc.stdout.strip() if date_proc.returncode == 0 else None
+    return (subject or None), (commit_date or None)
 
 
 def _run_git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:

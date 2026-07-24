@@ -41,6 +41,13 @@ max_budget_usd = 0     # 0 = no hard cap; cost is still logged every run
 timeout_sec = 900
 skim_max_files = 5     # bounds PROMPT SIZE, not scan cost — see session_extract.py
 skim_max_lines = 200
+# Auto-backfill: before a plain `run --job daily` (no --date), fill any day
+# in the past backfill_days days that has session activity but no diary
+# entry yet (spec.md §11). 0 = off (recommended default — see host.toml's
+# comment on why). backfill_max_per_run caps how many missing dates get
+# processed in ONE run, independent of how wide backfill_days is.
+backfill_days = 0
+backfill_max_per_run = 3
 
 [git]
 remote = "origin"

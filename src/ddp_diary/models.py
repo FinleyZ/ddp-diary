@@ -35,6 +35,12 @@ class LimitsConfig:
     timeout_sec: int
     skim_max_files: int
     skim_max_lines: int
+    # 0 = off (default). Look-back window, in days, for auto-backfilling a
+    # missed daily entry before handling today (spec.md §11).
+    backfill_days: int = 0
+    # Independent cap on how many missing dates get processed in one run,
+    # regardless of how wide backfill_days is — bounds worst-case cost.
+    backfill_max_per_run: int = 3
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,6 +81,20 @@ class Config:
     sync: SyncConfig
     log: LogConfig
     config_path: Path
+
+
+@dataclasses.dataclass(frozen=True)
+class GitStatus:
+    """Read-only snapshot of a data repo's git state, for `status` (spec.md
+    §9). Every field is best-effort — `gitops.read_status()` never raises, so
+    `ahead`/`behind` are None when no upstream is tracked, and every field is
+    None if `data_dir` isn't a git repo at all."""
+
+    is_dirty: Optional[bool] = None
+    ahead: Optional[int] = None
+    behind: Optional[int] = None
+    last_commit_subject: Optional[str] = None
+    last_commit_date: Optional[str] = None
 
 
 @dataclasses.dataclass

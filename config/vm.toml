@@ -26,6 +26,11 @@ max_budget_usd = 1.00
 timeout_sec = 900
 skim_max_files = 5
 skim_max_lines = 200
+# Auto-backfill missed days before today's run (spec.md §11) — this restores
+# the original VM script's behavior (it auto-filled the past 7 days), but
+# ships OFF here too until it's been watched run at least once manually.
+backfill_days = 0
+backfill_max_per_run = 3
 
 [git]
 remote = "origin"

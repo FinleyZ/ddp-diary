@@ -23,7 +23,7 @@ from .models import Config
 
 def run(config: Config, *, verbose: bool = False) -> int:
     if verbose:
-        _print_resolved_config(config)
+        print_resolved_config(config)
 
     results: list[tuple[str, str, str, int]] = []  # (name, status, detail, fail_exit_code)
 
@@ -62,7 +62,10 @@ def _warn(name: str, ok: bool, detail: str) -> tuple[str, str, str, int]:
     return (name, "OK" if ok else "WARN", detail, 0)
 
 
-def _print_resolved_config(config: Config) -> None:
+def print_resolved_config(config: Config) -> None:
+    """Print a plain-text summary of what a config file actually resolved to
+    — shared by `doctor -v` and `status -v` (spec.md §9) so both stay
+    identical without duplicating print lines that would drift apart."""
     print(f"role: {config.role}")
     print(f"data_dir: {config.data_dir}")
     print(f"shared_dir: {config.shared_dir}")
@@ -71,7 +74,10 @@ def _print_resolved_config(config: Config) -> None:
     print(f"claude.bin: {config.claude.bin}")
     print(f"claude.model: {config.claude.model}")
     print(f"git.push: {config.git.push} (remote={config.git.remote}, branch={config.git.branch})")
-    print(f"limits: max_turns={config.limits.max_turns} max_budget_usd={config.limits.max_budget_usd}")
+    print(
+        f"limits: max_turns={config.limits.max_turns} max_budget_usd={config.limits.max_budget_usd} "
+        f"backfill_days={config.limits.backfill_days} backfill_max_per_run={config.limits.backfill_max_per_run}"
+    )
     print("---")
 
 

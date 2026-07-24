@@ -8,7 +8,7 @@ import datetime
 
 import pytest
 
-from ddp_diary import cli, claude_client
+from ddp_diary import cli, claude_client, runner
 from ddp_diary.models import RunResult
 
 
@@ -111,6 +111,88 @@ def test_doctor_dispatches_and_returns_its_exit_code(data_repo, shared_dir, scra
     code = cli.main(["doctor", "--config", str(cfg_path)])
 
     assert code == 0  # claude.bin points at a real python executable; share/git-remote are WARN-only for vm
+
+
+def test_status_command_dispatches_and_returns_zero(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, capsys):
+    cfg_path = _config_path(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, role="host")
+
+    code = cli.main(["status", "--config", str(cfg_path)])
+
+    assert code == 0
+    assert "role: host" in capsys.readouterr().out
+
+
+def test_run_daily_without_date_dispatches_through_backfill_wrapper(monkeypatch, data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path):
+    calls = []
+    monkeypatch.setattr(runner, "run_daily_with_backfill", lambda cfg, **kw: calls.append("backfill_wrapper"))
+    monkeypatch.setattr(runner, "run_job", lambda cfg, job, **kw: calls.append("plain_run_job"))
+
+    cfg_path = _config_path(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, role="host")
+    code = cli.main(["run", "--job", "daily", "--config", str(cfg_path)])  # no --date
+
+    assert code == 0
+    assert calls == ["backfill_wrapper"]
+
+
+def test_run_daily_with_explicit_date_bypasses_backfill_wrapper(monkeypatch, data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path):
+    calls = []
+    monkeypatch.setattr(runner, "run_daily_with_backfill", lambda cfg, **kw: calls.append("backfill_wrapper"))
+    monkeypatch.setattr(runner, "run_job", lambda cfg, job, **kw: calls.append("plain_run_job"))
+
+    cfg_path = _config_path(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, role="host")
+    code = cli.main(["run", "--job", "daily", "--config", str(cfg_path), "--date", "today"])
+
+    assert code == 0
+    assert calls == ["plain_run_job"]
+
+
+def test_run_weekly_bypasses_backfill_wrapper_even_without_date(monkeypatch, data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path):
+    calls = []
+    monkeypatch.setattr(runner, "run_daily_with_backfill", lambda cfg, **kw: calls.append("backfill_wrapper"))
+    monkeypatch.setattr(runner, "run_job", lambda cfg, job, **kw: calls.append("plain_run_job"))
+
+    cfg_path = _config_path(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, role="host")
+    code = cli.main(["run", "--job", "weekly", "--config", str(cfg_path)])
+
+    assert code == 0
+    assert calls == ["plain_run_job"]
+
+
+def test_date_accepts_today_and_yesterday_aliases_case_insensitively():
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+
+    assert cli._parse_date("today") == today
+    assert cli._parse_date("TODAY") == today
+    assert cli._parse_date("Today") == today
+    assert cli._parse_date("yesterday") == yesterday
+    assert cli._parse_date("YESTERDAY") == yesterday
+    assert cli._parse_date("2026-07-20") == datetime.date(2026, 7, 20)
+
+
+def test_bad_date_format_returns_exit_code_2_not_1(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, capsys):
+    cfg_path = _config_path(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, role="host")
+
+    code = cli.main(["run", "--job", "daily", "--config", str(cfg_path), "--date", "not-a-date"])
+
+    assert code == 2
+    assert "error:" in capsys.readouterr().err
+
+
+def test_backfill_from_and_to_accept_relative_aliases(monkeypatch, data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path):
+    calls = []
+
+    def fake_claude_run(prompt_text, *, claude_cfg, limits, cwd):
+        calls.append(1)
+        return RunResult(ok=True, result_text="ok", total_cost_usd=0.01, num_turns=1, duration_ms=10, raw_stdout="", raw_stderr="", exit_code=0)
+
+    monkeypatch.setattr(claude_client, "run", fake_claude_run)
+    cfg_path = _config_path(data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, role="vm")
+
+    code = cli.main(["backfill", "--config", str(cfg_path), "--from", "yesterday", "--to", "today"])
+
+    assert code == 0
+    assert len(calls) == 2
 
 
 def test_unexpected_exception_never_leaks_a_traceback(monkeypatch, data_repo, shared_dir, scratch_dir, claude_projects_dir, tmp_path, capsys):

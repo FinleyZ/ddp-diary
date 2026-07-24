@@ -15,6 +15,7 @@ from typing import Optional, Sequence
 from . import config as config_module
 from . import doctor as doctor_module
 from . import mount, runner
+from . import status as status_module
 from .errors import ConfigError, DdpDiaryError, ShareUnavailableError, exit_code_for
 from .models import Config
 
@@ -39,6 +40,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     try:
         if args.command == "run":
+            if args.job == "daily" and args.date is None:
+                # The real scheduled launcher's exact invocation (no --date):
+                # best-effort auto-backfill first (off unless limits.backfill_days
+                # is set), then today's run. An explicit --date (even "today")
+                # bypasses backfill entirely and goes through plain run_job below.
+                runner.run_daily_with_backfill(
+                    cfg,
+                    dry_run=args.dry_run,
+                    no_push=args.no_push,
+                    verbose=args.verbose,
+                )
+                return 0
+
             target_date = _parse_date(args.date) if args.date else None
             runner.run_job(
                 cfg,
@@ -60,6 +74,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         if args.command == "doctor":
             return doctor_module.run(cfg, verbose=args.verbose)
+
+        if args.command == "status":
+            return status_module.run(cfg, verbose=args.verbose)
 
     except DdpDiaryError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -109,7 +126,15 @@ def _run_sync(cfg: Config, args: argparse.Namespace) -> None:
 
 
 def _parse_date(value: str) -> datetime.date:
-    return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+    lowered = value.strip().lower()
+    if lowered == "today":
+        return datetime.date.today()
+    if lowered == "yesterday":
+        return datetime.date.today() - datetime.timedelta(days=1)
+    try:
+        return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ConfigError(f"invalid date {value!r}: expected YYYY-MM-DD, 'today', or 'yesterday'") from exc
 
 
 def _parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
@@ -120,7 +145,14 @@ def _parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     p_run.add_argument("--job", choices=["daily", "weekly", "monthly"], required=True)
     p_run.add_argument("--config", required=True)
     p_run.add_argument("--role", choices=["host", "vm"], default=None)
-    p_run.add_argument("--date", default=None, help="override target date (YYYY-MM-DD)")
+    p_run.add_argument(
+        "--date",
+        default=None,
+        help="override target date (YYYY-MM-DD, 'today', or 'yesterday'). "
+        "Note: omitting --date entirely (the normal scheduled case) enables "
+        "auto-backfill if limits.backfill_days is set; an explicit --date "
+        "(including 'today') always bypasses backfill.",
+    )
     p_run.add_argument("--dry-run", action="store_true")
     p_run.add_argument("--no-push", action="store_true")
     p_run.add_argument("-v", "--verbose", action="store_true")
@@ -128,8 +160,8 @@ def _parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     p_backfill = sub.add_parser("backfill", help="reprocess a daily date range")
     p_backfill.add_argument("--config", required=True)
     p_backfill.add_argument("--role", choices=["host", "vm"], default=None)
-    p_backfill.add_argument("--from", dest="from_date", required=True)
-    p_backfill.add_argument("--to", dest="to_date", required=True)
+    p_backfill.add_argument("--from", dest="from_date", required=True, help="YYYY-MM-DD, 'today', or 'yesterday'")
+    p_backfill.add_argument("--to", dest="to_date", required=True, help="YYYY-MM-DD, 'today', or 'yesterday'")
     p_backfill.add_argument("--dry-run", action="store_true")
 
     p_sync = sub.add_parser("sync", help="run only the ingest/export stage")
@@ -143,6 +175,11 @@ def _parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     p_doctor.add_argument("--config", required=True)
     p_doctor.add_argument("--role", choices=["host", "vm"], default=None)
     p_doctor.add_argument("-v", "--verbose", action="store_true")
+
+    p_status = sub.add_parser("status", help="one-glance report: last entry, git state, last run outcome")
+    p_status.add_argument("--config", required=True)
+    p_status.add_argument("--role", choices=["host", "vm"], default=None)
+    p_status.add_argument("-v", "--verbose", action="store_true")
 
     sub.add_parser("version", help="print the ddp-diary version")
 
